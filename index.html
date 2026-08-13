@@ -1,0 +1,797 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no">
+<title>Everyday — a wooden calendar puzzle</title>
+<style>
+  :root{
+    --birch: #efe6d3;
+    --birch-dark: #e2d3b4;
+    --walnut: #4a3527;
+    --walnut-2: #6b4d38;
+    --ink: #3a2c1f;
+    --paper: #f7f1e3;
+    --accent: #b5563c;
+    --good: #6e8c6e;
+    --bad: #b5563c;
+    --cell: 40px;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{
+    margin:0; padding:0; min-height:100%;
+    background: radial-gradient(ellipse at top, #5a4028, #2e2015 70%);
+    font-family: 'Georgia', 'Iowan Old Style', serif;
+    color: var(--paper);
+    overflow-x:hidden;
+  }
+  .wrap{
+    max-width: 480px;
+    margin: 0 auto;
+    padding: 18px 14px 40px;
+  }
+  header{ text-align:center; margin-bottom: 6px; }
+  header h1{
+    font-family: 'Palatino', 'Georgia', serif;
+    font-weight: 400; letter-spacing: 3px; font-size: 26px;
+    margin: 4px 0 2px; color: #f3e6c8; text-transform: uppercase;
+  }
+  header .sub{ font-size: 12.5px; color: #cbb894; letter-spacing: 1px; font-style: italic; }
+  .datebar{
+    display:flex; align-items:center; justify-content:center; gap:8px;
+    margin: 14px 0 10px; flex-wrap: wrap;
+  }
+  .datebar input[type=date]{
+    background: var(--paper); border: none; border-radius: 8px;
+    padding: 7px 9px; font-family: inherit; color: var(--ink); font-size: 14px;
+  }
+  button{
+    font-family: inherit; cursor:pointer; border: none; border-radius: 8px;
+    padding: 7px 12px; font-size: 13px; background: #7c5a3d; color: #f7f1e3;
+    box-shadow: 0 2px 0 rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.08);
+    transition: transform .08s ease;
+  }
+  button:active{ transform: translateY(1px); }
+  button.primary{ background: var(--accent); }
+  button.ghost{ background: transparent; border: 1px solid #9c7f5f; color:#e6d6b3; box-shadow:none; }
+  button:disabled{ opacity:.4; cursor:default; }
+
+  .target-strip{ text-align:center; font-size: 13px; color:#d8c39a; margin-bottom: 6px; letter-spacing: .5px; }
+  .target-strip b{ color:#f3d99a; font-weight:600; }
+
+  .status-line{
+    text-align:center; font-size: 12px; min-height: 16px; margin-bottom: 10px;
+    color:#e8b978; letter-spacing:.3px; font-style: italic;
+  }
+
+  .board-frame{
+    background: linear-gradient(160deg, #efe1c0, #d8c495);
+    border-radius: 14px; padding: 12px;
+    box-shadow: 0 12px 30px rgba(0,0,0,0.45), inset 0 0 0 1px rgba(255,255,255,0.25);
+    margin: 0 auto; width: fit-content; position: relative;
+  }
+  #board{
+    display: grid;
+    grid-template-columns: repeat(7, var(--cell));
+    grid-template-rows: repeat(7, var(--cell));
+    gap: 3px; touch-action: none; position: relative;
+  }
+  .cell{
+    width: var(--cell); height: var(--cell); border-radius: 5px;
+    display:flex; align-items:center; justify-content:center;
+    font-size: 11.5px; color: var(--ink); background: var(--birch);
+    box-shadow: inset 0 0 0 1px rgba(74,53,39,0.12);
+    user-select:none; position:relative; font-variant-numeric: tabular-nums;
+  }
+  .cell.blocked{ background: transparent; box-shadow:none; }
+  .cell.target{
+    background: var(--paper); box-shadow: inset 0 0 0 2px var(--accent);
+    color: var(--accent); font-weight: 700;
+  }
+  .cell.filled{ color: rgba(255,255,255,0.92); font-weight:600; box-shadow: inset 0 0 0 1px rgba(0,0,0,0.25); }
+  .cell.preview-valid{ box-shadow: inset 0 0 0 2px var(--good); }
+  .cell.preview-invalid{ box-shadow: inset 0 0 0 2px var(--bad); }
+  .cell.flash-invalid{ animation: shake .3s ease; }
+  @keyframes shake{
+    0%,100%{ transform: translateX(0); }
+    25%{ transform: translateX(-3px); }
+    75%{ transform: translateX(3px); }
+  }
+  .cell .lbl{ pointer-events:none; }
+
+  .win-banner{
+    position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    background: rgba(239,230,211,0.92); border-radius: 10px; color: var(--accent);
+    font-size: 17px; font-weight: 700; letter-spacing: .5px;
+    opacity: 0; pointer-events: none; transition: opacity .3s ease;
+    text-align:center; flex-direction:column; gap:4px;
+  }
+  .win-banner.show{ opacity: 1; pointer-events:auto; }
+  .win-banner span{ font-size:12px; font-weight:400; color:#7a5a3f; font-style:italic; }
+
+  .controls{ display:flex; gap:8px; justify-content:center; margin: 14px 0 4px; flex-wrap:wrap; }
+
+  .tray-label{
+    text-align:center; font-size:11.5px; letter-spacing:1.5px; text-transform:uppercase;
+    color:#b39c74; margin: 18px 0 8px;
+  }
+  #tray{ display:flex; flex-wrap:wrap; gap:14px; justify-content:center; padding: 10px 6px 4px; }
+  .piece-holder{
+    display:flex; flex-direction:column; align-items:center; gap:6px;
+    padding: 6px; border-radius: 10px; transition: box-shadow .15s ease, background .15s ease;
+  }
+  .piece-holder.selected{
+    background: rgba(247,241,227,0.08);
+    box-shadow: 0 0 0 2px #e8b978, 0 0 14px rgba(232,185,120,0.4);
+  }
+  .piece-frame{
+    width: 170px; height: 170px;
+    display:flex; align-items:center; justify-content:center;
+    cursor: grab;
+  }
+  .piece-grid{ display:grid; gap: 3px; touch-action:none; }
+  .piece-cell{ width: var(--cell); height: var(--cell); border-radius: 5px; }
+  .piece-cell.filled{ box-shadow: inset 0 0 0 1px rgba(0,0,0,0.25), 0 1px 2px rgba(0,0,0,0.3); }
+  .piece-actions{ display:flex; gap:6px; }
+  .piece-actions button{ padding: 5px 10px; font-size: 13px; line-height:1; }
+
+  .drag-ghost{
+    position:fixed; z-index: 999; pointer-events:none;
+    display:grid; gap:3px; opacity:0.92;
+  }
+  .drag-ghost .piece-cell{ box-shadow: inset 0 0 0 1px rgba(0,0,0,0.3), 0 6px 14px rgba(0,0,0,0.55); }
+
+  footer{ text-align:center; margin-top: 26px; font-size: 11px; color:#8d7657; line-height:1.6; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Everyday</h1>
+    <div class="sub">a wooden calendar puzzle, on screen</div>
+  </header>
+
+  <div class="datebar">
+    <input type="date" id="dateInput">
+    <button class="ghost" id="todayBtn">Today</button>
+  </div>
+  <div class="target-strip">Cover every cell except <b id="targetText">&nbsp;</b></div>
+  <div class="status-line" id="statusLine">Tap a piece, then tap the board to place it — or drag it directly.</div>
+
+  <div class="board-frame">
+    <div id="board"></div>
+    <div class="win-banner" id="winBanner"><div>Solved ✦</div><span id="winSub"></span></div>
+  </div>
+
+  <div class="controls">
+    <button class="ghost" id="clearBtn">Clear board</button>
+    <button class="primary" id="solveBtn">Solve for me</button>
+  </div>
+
+  <div class="tray-label">Pieces</div>
+  <div id="tray"></div>
+
+  <footer>Tap a piece to select it, then tap an empty cell to drop it there.<br>Tap a placed piece to lift it back up. Rotate and Flip give every possible turn.</footer>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  /* ---------- Board geometry ---------- */
+  const ROWS = 7, COLS = 7;
+  const BLOCKED = new Set(["0,6","1,6","6,3","6,4","6,5","6,6"]);
+  const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+  function isBlocked(r,c){
+    if(r<0||c<0||r>=ROWS||c>=COLS) return true;
+    return BLOCKED.has(r+","+c);
+  }
+  function monthCell(monthIdx){
+    const row = monthIdx < 6 ? 0 : 1;
+    const col = monthIdx % 6;
+    return {row,col};
+  }
+  function dayCell(day){
+    const row = 2 + Math.floor((day-1)/7);
+    const col = (day-1) % 7;
+    return {row,col};
+  }
+  function cellLabel(r,c){
+    if(isBlocked(r,c)) return "";
+    if(r<2) return MONTHS[r*6+c];
+    const day = (r-2)*7 + c + 1;
+    return day<=31 ? String(day) : "";
+  }
+  function cellExists(r,c){
+    if(isBlocked(r,c)) return false;
+    if(r<2) return true;
+    const day = (r-2)*7 + c + 1;
+    return day>=1 && day<=31;
+  }
+
+  /* ---------- Piece shapes (base, single orientation each) ---------- */
+  const BASE_PIECES = [
+    { id:0, color:"#c9a66b", cells:[[0,0],[1,0],[2,0],[0,1],[1,1],[2,1]] },
+    { id:1, color:"#b5563c", cells:[[0,0],[1,0],[2,0],[0,1],[1,1]] },
+    { id:2, color:"#6e8c6e", cells:[[0,0],[2,0],[0,1],[1,1],[2,1]] },
+    { id:3, color:"#5e7a9c", cells:[[0,0],[1,0],[2,0],[3,0],[0,1]] },
+    { id:4, color:"#c77b4b", cells:[[0,0],[1,0],[2,0],[3,0],[1,1]] },
+    { id:5, color:"#8c6e9c", cells:[[0,0],[1,0],[2,0],[0,1],[0,2]] },
+    { id:6, color:"#a3a34a", cells:[[0,0],[1,0],[1,1],[1,2],[2,2]] },
+    { id:7, color:"#4f6b6b", cells:[[2,0],[3,0],[0,1],[1,1],[2,1]] },
+  ];
+
+  function normalize(cells){
+    const minx = Math.min(...cells.map(p=>p[0]));
+    const miny = Math.min(...cells.map(p=>p[1]));
+    return cells.map(([x,y])=>[x-minx,y-miny]).sort((a,b)=> a[1]-b[1] || a[0]-b[0]);
+  }
+  function rot(cells){ return cells.map(([x,y])=>[-y,x]); }
+  function mir(cells){ return cells.map(([x,y])=>[-x,y]); }
+  function key(cells){ return cells.map(p=>p.join(":")).join(","); }
+
+  // Up to 4 unique rotations of a shape (no mirroring)
+  function generateRotations(base){
+    const seen = new Set(); const out = [];
+    let cur = base;
+    for(let r=0;r<4;r++){
+      const norm = normalize(cur);
+      const k = key(norm);
+      if(!seen.has(k)){ seen.add(k); out.push(norm); }
+      cur = rot(cur);
+    }
+    return out;
+  }
+  // Full set (rotations + mirrored rotations), used only by the solver
+  function generateOrientations(base){
+    const seen = new Set(); const out = [];
+    let cur = base;
+    for(let m=0;m<2;m++){
+      let rcur = cur;
+      for(let r=0;r<4;r++){
+        const norm = normalize(rcur);
+        const k = key(norm);
+        if(!seen.has(k)){ seen.add(k); out.push(norm); }
+        rcur = rot(rcur);
+      }
+      cur = mir(cur);
+    }
+    return out;
+  }
+
+  const SOLVER_ORI = BASE_PIECES.map(p => generateOrientations(p.cells));
+
+  /* ---------- Game state ---------- */
+  const CELL = 40;
+  const state = {
+    board: new Array(ROWS*COLS).fill(-1),
+    pieces: BASE_PIECES.map(p=>({
+      id:p.id, color:p.color,
+      rot0: generateRotations(p.cells),
+      rot1: generateRotations(mir(p.cells)),
+      mirrored:false, rotIndex:0,
+      placed:false, anchorRow:0, anchorCol:0
+    })),
+    target: { monthIdx:0, day:1 },
+  };
+  let selectedPieceId = null;
+
+  function idx(r,c){ return r*COLS+c; }
+  function currentList(piece){ return piece.mirrored ? piece.rot1 : piece.rot0; }
+  function getShape(piece){ return currentList(piece)[piece.rotIndex]; }
+  function absCells(piece){
+    const shape = getShape(piece);
+    return shape.map(([x,y])=>[piece.anchorRow+y, piece.anchorCol+x]);
+  }
+
+  /* ---------- DOM refs ---------- */
+  const boardEl = document.getElementById('board');
+  const trayEl = document.getElementById('tray');
+  const winBanner = document.getElementById('winBanner');
+  const winSub = document.getElementById('winSub');
+  const targetText = document.getElementById('targetText');
+  const dateInput = document.getElementById('dateInput');
+  const statusLine = document.getElementById('statusLine');
+
+  /* ---------- Build board cells ---------- */
+  const cellEls = [];
+  for(let r=0;r<ROWS;r++){
+    for(let c=0;c<COLS;c++){
+      const d = document.createElement('div');
+      d.className = 'cell';
+      const exists = cellExists(r,c);
+      if(!exists){ d.classList.add('blocked'); }
+      else {
+        const lbl = document.createElement('div');
+        lbl.className = 'lbl';
+        lbl.textContent = cellLabel(r,c);
+        d.appendChild(lbl);
+      }
+      d.dataset.r = r; d.dataset.c = c;
+      boardEl.appendChild(d);
+      cellEls.push(d);
+    }
+  }
+
+  function setTarget(monthIdx, day){
+    state.target.monthIdx = monthIdx;
+    state.target.day = day;
+    targetText.textContent = MONTHS[monthIdx] + " " + day;
+  }
+  function targetCells(){
+    const mc = monthCell(state.target.monthIdx);
+    const dc = dayCell(state.target.day);
+    return [mc, dc];
+  }
+
+  function setStatus(msg){ statusLine.textContent = msg; }
+
+  function renderBoard(){
+    const tgt = targetCells();
+    const tgtSet = new Set(tgt.map(t=>t.row+","+t.col));
+    for(let r=0;r<ROWS;r++){
+      for(let c=0;c<COLS;c++){
+        const el = cellEls[idx(r,c)];
+        if(!cellExists(r,c)) continue;
+        el.classList.remove('preview-valid','preview-invalid');
+        const pid = state.board[idx(r,c)];
+        const isTarget = tgtSet.has(r+","+c);
+        el.classList.toggle('target', isTarget && pid===-1);
+        if(pid===-1){
+          el.classList.remove('filled');
+          el.style.background = '';
+        } else {
+          el.classList.add('filled');
+          el.classList.remove('target');
+          el.style.background = state.pieces[pid].color;
+        }
+      }
+    }
+    checkWin();
+  }
+
+  function checkWin(){
+    const tgt = targetCells();
+    const tgtSet = new Set(tgt.map(t=>t.row+","+t.col));
+    let ok = true;
+    outer:
+    for(let r=0;r<ROWS;r++){
+      for(let c=0;c<COLS;c++){
+        if(!cellExists(r,c)) continue;
+        const filled = state.board[idx(r,c)] !== -1;
+        const isTgt = tgtSet.has(r+","+c);
+        if(isTgt && filled){ ok=false; break outer; }
+        if(!isTgt && !filled){ ok=false; break outer; }
+      }
+    }
+    winBanner.classList.toggle('show', ok);
+    if(ok){
+      winSub.textContent = MONTHS[state.target.monthIdx] + " " + state.target.day + " — every piece placed";
+      setStatus("");
+    }
+  }
+
+  function canPlace(pieceIdForSkip, cells){
+    const tgt = new Set(targetCells().map(t=>t.row+","+t.col));
+    for(const [r,c] of cells){
+      if(!cellExists(r,c)) return false;
+      if(tgt.has(r+","+c)) return false;
+      const occ = state.board[idx(r,c)];
+      if(occ !== -1 && occ !== pieceIdForSkip) return false;
+    }
+    return true;
+  }
+  function writeBoard(pieceId, cells, val){
+    for(const [r,c] of cells){ state.board[idx(r,c)] = val ? pieceId : -1; }
+  }
+  function commitPlacement(piece, anchorRow, anchorCol){
+    piece.anchorRow = anchorRow;
+    piece.anchorCol = anchorCol;
+    piece.placed = true;
+    writeBoard(piece.id, absCells(piece), true);
+  }
+
+  function rotatePiece(piece, dir){
+    const list = currentList(piece);
+    const n = list.length;
+    piece.rotIndex = ((piece.rotIndex + dir) % n + n) % n;
+  }
+  function flipPiece(piece){
+    piece.mirrored = !piece.mirrored;
+    const list = currentList(piece);
+    piece.rotIndex = piece.rotIndex % list.length;
+  }
+
+  /* ---------- Tray rendering ---------- */
+  function renderTray(){
+    trayEl.innerHTML = '';
+    state.pieces.forEach(piece=>{
+      if(piece.placed) return;
+      const holder = document.createElement('div');
+      holder.className = 'piece-holder' + (selectedPieceId===piece.id ? ' selected' : '');
+
+      const frame = document.createElement('div');
+      frame.className = 'piece-frame';
+
+      const shape = getShape(piece);
+      const maxx = Math.max(...shape.map(p=>p[0]))+1;
+      const maxy = Math.max(...shape.map(p=>p[1]))+1;
+      const grid = document.createElement('div');
+      grid.className = 'piece-grid';
+      grid.style.gridTemplateColumns = `repeat(${maxx}, ${CELL}px)`;
+      grid.style.gridTemplateRows = `repeat(${maxy}, ${CELL}px)`;
+      const filledSet = new Set(shape.map(p=>p[0]+","+p[1]));
+      for(let y=0;y<maxy;y++){
+        for(let x=0;x<maxx;x++){
+          const cd = document.createElement('div');
+          if(filledSet.has(x+","+y)){
+            cd.className = 'piece-cell filled';
+            cd.style.background = piece.color;
+            cd.addEventListener('pointerdown', (e)=> startDrag(e, piece, false, x, y));
+          } else {
+            cd.className = 'piece-cell';
+            cd.style.visibility = 'hidden';
+          }
+          grid.appendChild(cd);
+        }
+      }
+      frame.appendChild(grid);
+      holder.appendChild(frame);
+
+      const actions = document.createElement('div');
+      actions.className = 'piece-actions';
+
+      const rotBtn = document.createElement('button');
+      rotBtn.className = 'ghost';
+      rotBtn.textContent = '⟳ Rotate';
+      rotBtn.addEventListener('click', (e)=>{
+        e.stopPropagation();
+        selectedPieceId = piece.id;
+        rotatePiece(piece, 1);
+        renderTray();
+      });
+      actions.appendChild(rotBtn);
+
+      const flipBtn = document.createElement('button');
+      flipBtn.className = 'ghost';
+      flipBtn.textContent = '⇋ Flip';
+      flipBtn.addEventListener('click', (e)=>{
+        e.stopPropagation();
+        selectedPieceId = piece.id;
+        flipPiece(piece);
+        renderTray();
+      });
+      actions.appendChild(flipBtn);
+
+      holder.appendChild(actions);
+      trayEl.appendChild(holder);
+    });
+
+    if(selectedPieceId !== null){
+      setStatus("Piece selected — tap the board to drop it. (← → to rotate, ↑ ↓ to flip)");
+    } else {
+      setStatus("Tap a piece, then tap the board to place it — or drag it directly.");
+    }
+  }
+
+  /* ---------- Dragging ---------- */
+  let drag = null;
+
+  function startDrag(e, piece, fromBoard, gx, gy){
+    e.preventDefault();
+    e.stopPropagation();
+    if(drag) return;
+    if(fromBoard){
+      writeBoard(piece.id, absCells(piece), false);
+      piece.placed = false;
+    }
+    selectedPieceId = null;
+    const shape = getShape(piece);
+    drag = {
+      piece, gx, gy, shape,
+      pointerType: e.pointerType || 'mouse',
+      liftOffset: (e.pointerType === 'touch') ? 64 : 0,
+      moved: false,
+      startX: e.clientX, startY: e.clientY,
+      anchorRow: piece.anchorRow, anchorCol: piece.anchorCol,
+      lastOk: false, lastCells: [],
+    };
+    const ghost = document.createElement('div');
+    ghost.className = 'drag-ghost';
+    const maxx = Math.max(...shape.map(p=>p[0]))+1;
+    const maxy = Math.max(...shape.map(p=>p[1]))+1;
+    ghost.style.gridTemplateColumns = `repeat(${maxx}, ${CELL}px)`;
+    ghost.style.gridTemplateRows = `repeat(${maxy}, ${CELL}px)`;
+    const filledSet = new Set(shape.map(p=>p[0]+","+p[1]));
+    for(let y=0;y<maxy;y++){
+      for(let x=0;x<maxx;x++){
+        const cd = document.createElement('div');
+        cd.className = 'piece-cell';
+        if(filledSet.has(x+","+y)){
+          cd.classList.add('filled');
+          cd.style.background = piece.color;
+        } else {
+          cd.style.visibility='hidden';
+        }
+        ghost.appendChild(cd);
+      }
+    }
+    document.body.appendChild(ghost);
+    drag.ghostEl = ghost;
+    drag.lastClientX = e.clientX;
+    drag.lastClientY = e.clientY;
+    if(fromBoard || true){ renderBoard(); renderTray(); }
+    positionGhost(e.clientX, e.clientY);
+    drag.rafId = requestAnimationFrame(autoScrollTick);
+
+    window.addEventListener('pointermove', onDragMove);
+    window.addEventListener('pointerup', onDragEnd);
+    window.addEventListener('pointercancel', onDragEnd);
+  }
+
+  function positionGhost(clientX, clientY){
+    const {ghostEl, gx, gy, liftOffset} = drag;
+    ghostEl.style.left = (clientX - gx*CELL - CELL/2) + 'px';
+    ghostEl.style.top = (clientY - gy*CELL - CELL/2 - liftOffset) + 'px';
+  }
+
+  function clearPreview(){
+    cellEls.forEach(el=> el.classList.remove('preview-valid','preview-invalid'));
+  }
+
+  function currentTargetAnchor(clientX, clientY){
+    const rect = boardEl.getBoundingClientRect();
+    const localX = clientX - rect.left - drag.gx*CELL;
+    const localY = (clientY - drag.liftOffset) - rect.top - drag.gy*CELL;
+    const anchorCol = Math.round(localX / (CELL+3));
+    const anchorRow = Math.round(localY / (CELL+3));
+    return {anchorRow, anchorCol};
+  }
+
+  function updatePreview(clientX, clientY){
+    positionGhost(clientX, clientY);
+    const {anchorRow, anchorCol} = currentTargetAnchor(clientX, clientY);
+    drag.anchorRow = anchorRow; drag.anchorCol = anchorCol;
+    const cells = drag.shape.map(([x,y])=>[anchorRow+y, anchorCol+x]);
+    const ok = canPlace(drag.piece.id, cells);
+    clearPreview();
+    cells.forEach(([r,c])=>{
+      if(r>=0&&c>=0&&r<ROWS&&c<COLS){
+        const el = cellEls[idx(r,c)];
+        el.classList.add(ok ? 'preview-valid':'preview-invalid');
+      }
+    });
+    drag.lastCells = cells;
+    drag.lastOk = ok;
+  }
+
+  // Auto-scroll the page when a dragged piece is held near the top/bottom edge
+  // of the viewport, so the user never has to fight the drag to scroll manually.
+  const EDGE_ZONE = 90, EDGE_MAX_SPEED = 16;
+  function autoScrollTick(){
+    if(!drag) return;
+    const y = drag.lastClientY;
+    let dy = 0;
+    if(y !== undefined){
+      if(y < EDGE_ZONE){
+        dy = -EDGE_MAX_SPEED * (1 - y/EDGE_ZONE);
+      } else if(y > window.innerHeight - EDGE_ZONE){
+        dy = EDGE_MAX_SPEED * (1 - (window.innerHeight - y)/EDGE_ZONE);
+      }
+    }
+    if(dy !== 0){
+      const before = window.scrollY;
+      window.scrollBy(0, dy);
+      if(window.scrollY !== before){
+        updatePreview(drag.lastClientX, drag.lastClientY);
+      }
+    }
+    drag.rafId = requestAnimationFrame(autoScrollTick);
+  }
+
+  function onDragMove(e){
+    if(!drag) return;
+    if(Math.abs(e.clientX-drag.startX) > 4 || Math.abs(e.clientY-drag.startY) > 4) drag.moved = true;
+    drag.lastClientX = e.clientX;
+    drag.lastClientY = e.clientY;
+    updatePreview(e.clientX, e.clientY);
+  }
+
+  function onDragEnd(e){
+    if(!drag) return;
+    window.removeEventListener('pointermove', onDragMove);
+    window.removeEventListener('pointerup', onDragEnd);
+    window.removeEventListener('pointercancel', onDragEnd);
+    if(drag.rafId) cancelAnimationFrame(drag.rafId);
+    drag.ghostEl.remove();
+    clearPreview();
+
+    if(drag.moved){
+      if(drag.lastOk){
+        commitPlacement(drag.piece, drag.anchorRow, drag.anchorCol);
+        selectedPieceId = null;
+      } else {
+        drag.piece.placed = false;
+        selectedPieceId = drag.piece.id;
+      }
+    } else {
+      selectedPieceId = (selectedPieceId === drag.piece.id) ? null : drag.piece.id;
+      drag.piece.placed = false;
+    }
+    drag = null;
+    renderBoard();
+    renderTray();
+  }
+
+  function flashInvalid(cellEl){
+    cellEl.classList.add('flash-invalid','preview-invalid');
+    setTimeout(()=>{ cellEl.classList.remove('flash-invalid','preview-invalid'); }, 300);
+  }
+
+  /* board pointerdown: pick up a placed piece, or tap-place a selected one */
+  boardEl.addEventListener('pointerdown', (e)=>{
+    if(drag) return;
+    const cellEl = e.target.closest('.cell');
+    if(!cellEl || cellEl.classList.contains('blocked')) return;
+    const r = +cellEl.dataset.r, c = +cellEl.dataset.c;
+    const pid = state.board[idx(r,c)];
+
+    if(pid !== -1){
+      const piece = state.pieces[pid];
+      const cells = absCells(piece);
+      const local = cells.findIndex(([rr,cc])=> rr===r && cc===c);
+      const shape = getShape(piece);
+      const [gx,gy] = shape[local];
+      startDrag(e, piece, true, gx, gy);
+      return;
+    }
+
+    if(selectedPieceId !== null){
+      const piece = state.pieces[selectedPieceId];
+      const shape = getShape(piece);
+      const [ax,ay] = shape[0];
+      const anchorRow = r - ay, anchorCol = c - ax;
+      const cells = shape.map(([x,y])=>[anchorRow+y, anchorCol+x]);
+      if(canPlace(piece.id, cells)){
+        commitPlacement(piece, anchorRow, anchorCol);
+        selectedPieceId = null;
+        renderBoard(); renderTray();
+      } else {
+        flashInvalid(cellEl);
+      }
+    }
+  });
+
+  /* ---------- Solver (exact cover via backtracking) ---------- */
+  function solve(){
+    const tgt = new Set(targetCells().map(t=>t.row+","+t.col));
+    const needSet = new Set();
+    for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++){
+      if(cellExists(r,c) && !tgt.has(r+","+c)) needSet.add(r+","+c);
+    }
+    const usedPieces = new Array(SOLVER_ORI.length).fill(false);
+    const placement = [];
+    const occ = new Set();
+
+    function firstEmpty(){
+      for(let r=0;r<ROWS;r++) for(let c=0;c<COLS;c++){
+        const k = r+","+c;
+        if(needSet.has(k) && !occ.has(k)) return {r,c};
+      }
+      return null;
+    }
+
+    function backtrack(){
+      const empty = firstEmpty();
+      if(!empty) return true;
+      for(let pi=0; pi<SOLVER_ORI.length; pi++){
+        if(usedPieces[pi]) continue;
+        const oris = SOLVER_ORI[pi];
+        for(let oi=0; oi<oris.length; oi++){
+          const shape = oris[oi];
+          for(const [sx,sy] of shape){
+            const anchorRow = empty.r - sy;
+            const anchorCol = empty.c - sx;
+            const cells = shape.map(([x,y])=>[anchorRow+y, anchorCol+x]);
+            let ok = true;
+            for(const [r,c] of cells){
+              const k = r+","+c;
+              if(!needSet.has(k) || occ.has(k)){ ok=false; break; }
+            }
+            if(!ok) continue;
+            cells.forEach(([r,c])=>occ.add(r+","+c));
+            usedPieces[pi] = true;
+            placement.push({pieceId:pi, oriIndex:oi, anchorRow, anchorCol, cells});
+            if(backtrack()) return true;
+            placement.pop();
+            usedPieces[pi] = false;
+            cells.forEach(([r,c])=>occ.delete(r+","+c));
+          }
+        }
+      }
+      return false;
+    }
+
+    return backtrack() ? placement : null;
+  }
+
+  function applySolution(placement){
+    state.pieces.forEach(p=>{ p.placed=false; });
+    state.board.fill(-1);
+    selectedPieceId = null;
+    placement.forEach(pl=>{
+      const piece = state.pieces[pl.pieceId];
+      const shape = SOLVER_ORI[pl.pieceId][pl.oriIndex];
+      const k = key(shape);
+      let i = piece.rot0.findIndex(s=>key(s)===k);
+      if(i !== -1){ piece.mirrored=false; piece.rotIndex=i; }
+      else { i = piece.rot1.findIndex(s=>key(s)===k); piece.mirrored=true; piece.rotIndex=Math.max(i,0); }
+      piece.anchorRow = pl.anchorRow;
+      piece.anchorCol = pl.anchorCol;
+      piece.placed = true;
+      writeBoard(piece.id, pl.cells, true);
+    });
+    renderBoard();
+    renderTray();
+  }
+
+  /* ---------- Controls ---------- */
+  document.getElementById('solveBtn').addEventListener('click', ()=>{
+    const sol = solve();
+    if(sol) applySolution(sol);
+    else alert("No solution found — that shouldn't happen! Try Clear and pick another date.");
+  });
+  document.getElementById('clearBtn').addEventListener('click', ()=>{
+    state.pieces.forEach(p=> p.placed=false);
+    state.board.fill(-1);
+    selectedPieceId = null;
+    renderBoard(); renderTray();
+  });
+  document.getElementById('todayBtn').addEventListener('click', ()=>{
+    setToday();
+    state.pieces.forEach(p=> p.placed=false);
+    state.board.fill(-1);
+    selectedPieceId = null;
+    renderBoard(); renderTray();
+  });
+  dateInput.addEventListener('change', ()=>{
+    const [y,m,d] = dateInput.value.split('-').map(Number);
+    setTarget(m-1, d);
+    state.pieces.forEach(p=> p.placed=false);
+    state.board.fill(-1);
+    selectedPieceId = null;
+    renderBoard(); renderTray();
+  });
+
+  function setToday(){
+    const now = new Date();
+    setTarget(now.getMonth(), now.getDate());
+    const iso = now.toISOString().slice(0,10);
+    dateInput.value = iso;
+  }
+
+  /* ---------- Keyboard controls (desktop) ---------- */
+  document.addEventListener('keydown', (e)=>{
+    if(selectedPieceId === null) return;
+    const piece = state.pieces[selectedPieceId];
+    if(!piece) return;
+    let handled = true;
+    switch(e.key){
+      case 'ArrowRight': rotatePiece(piece, 1); break;
+      case 'ArrowLeft': rotatePiece(piece, -1); break;
+      case 'ArrowUp':
+      case 'ArrowDown': flipPiece(piece); break;
+      default: handled = false;
+    }
+    if(handled){ e.preventDefault(); renderTray(); }
+  });
+
+  /* ---------- Init ---------- */
+  setToday();
+  renderBoard();
+  renderTray();
+})();
+</script>
+</body>
+</html>
