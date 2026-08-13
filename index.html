@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no">
-<title>Everyday — a calendar puzzle - By Gannon K.</title>
+<title>Everyday — a wooden calendar puzzle</title>
 <style>
   :root{
     --birch: #efe6d3;
@@ -109,6 +109,52 @@
   .win-banner.show{ opacity: 1; pointer-events:auto; }
   .win-banner span{ font-size:12px; font-weight:400; color:#7a5a3f; font-style:italic; }
 
+  /* ---- Win modal ---- */
+  .modal-overlay{
+    position:fixed; inset:0; background: rgba(20,13,7,0.72);
+    display:flex; align-items:center; justify-content:center;
+    z-index: 1200; padding: 20px;
+    opacity:0; pointer-events:none; transition: opacity .25s ease;
+  }
+  .modal-overlay.show{ opacity:1; pointer-events:auto; }
+  .modal-card{
+    position:relative; overflow:hidden;
+    background: linear-gradient(160deg, #f7f1e3, #e9dab8);
+    color: var(--ink); border-radius: 16px;
+    padding: 30px 26px 24px; max-width: 320px; width:100%;
+    text-align:center;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+    transform: scale(.85) translateY(10px); opacity:0;
+    transition: transform .3s cubic-bezier(.34,1.56,.64,1), opacity .25s ease;
+  }
+  .modal-overlay.show .modal-card{ transform: scale(1) translateY(0); opacity:1; }
+  .modal-close{
+    position:absolute; top:10px; right:10px; background:transparent; box-shadow:none;
+    color: var(--walnut-2); font-size:18px; padding:4px 9px; border-radius:50%;
+  }
+  .modal-icon{ font-size: 34px; color: var(--accent); margin-bottom: 2px; }
+  .modal-card h2{
+    margin: 0 0 2px; font-family:'Palatino','Georgia',serif; letter-spacing:1px;
+    text-transform:uppercase; font-size:20px; color: var(--walnut);
+  }
+  .modal-date{ font-size: 15px; color:#7a5a3f; margin-bottom: 10px; font-style:italic; }
+  .modal-stats{
+    font-size: 13.5px; color: var(--ink); background: rgba(181,86,60,0.1);
+    border-radius: 8px; padding: 8px 10px; margin-bottom: 16px; letter-spacing:.2px;
+  }
+  .modal-actions{ display:flex; gap:8px; justify-content:center; margin-bottom: 10px; }
+  .modal-hint{ font-size: 11px; color:#8d7657; line-height:1.5; }
+
+  .confetti-layer{ position:absolute; inset:0; overflow:hidden; pointer-events:none; }
+  .confetti-piece{
+    position:absolute; top:-12px; width:7px; height:7px; border-radius:2px;
+    animation: confetti-fall 1.15s ease-in forwards;
+  }
+  @keyframes confetti-fall{
+    0%{ transform: translateY(-10px) rotate(0deg); opacity:1; }
+    100%{ transform: translateY(220px) rotate(420deg); opacity:0; }
+  }
+
   .controls{ display:flex; gap:8px; justify-content:center; margin: 14px 0 4px; flex-wrap:wrap; }
 
   .tray-label{
@@ -148,7 +194,7 @@
 <div class="wrap">
   <header>
     <h1>Everyday</h1>
-    <div class="sub">a calendar puzzle - By Gannon K.</div>
+    <div class="sub">a wooden calendar puzzle, on screen</div>
   </header>
 
   <div class="datebar">
@@ -172,6 +218,21 @@
   <div id="tray"></div>
 
   <footer>Tap a piece to select it, then tap an empty cell to drop it there.<br>Tap a placed piece to lift it back up. Rotate and Flip give every possible turn.</footer>
+</div>
+
+<div class="modal-overlay" id="winModal">
+  <div class="modal-card">
+    <button class="modal-close" id="modalClose" aria-label="Close">×</button>
+    <div class="confetti-layer" id="confettiLayer"></div>
+    <div class="modal-icon">✦</div>
+    <h2>Solved!</h2>
+    <div class="modal-date" id="modalDate">—</div>
+    <div class="modal-stats" id="modalStats">—</div>
+    <div class="modal-actions">
+      <button class="primary" id="shareBtn">Share result</button>
+    </div>
+    <div class="modal-hint">Your layout stays your secret — only the time and move count are shared.</div>
+  </div>
 </div>
 
 <script>
@@ -274,6 +335,10 @@
       placed:false, anchorRow:0, anchorCol:0
     })),
     target: { monthIdx:0, day:1 },
+    startTime: null,
+    moveCount: 0,
+    usedSolver: false,
+    wonShown: false,
   };
   let selectedPieceId = null;
 
@@ -293,6 +358,12 @@
   const targetText = document.getElementById('targetText');
   const dateInput = document.getElementById('dateInput');
   const statusLine = document.getElementById('statusLine');
+  const winModal = document.getElementById('winModal');
+  const modalDate = document.getElementById('modalDate');
+  const modalStats = document.getElementById('modalStats');
+  const modalClose = document.getElementById('modalClose');
+  const shareBtn = document.getElementById('shareBtn');
+  const confettiLayer = document.getElementById('confettiLayer');
 
   /* ---------- Build board cells ---------- */
   const cellEls = [];
@@ -369,8 +440,69 @@
     if(ok){
       winSub.textContent = MONTHS[state.target.monthIdx] + " " + state.target.day + " — every piece placed";
       setStatus("");
+      if(!state.wonShown){
+        state.wonShown = true;
+        showWinModal();
+      }
+    } else {
+      state.wonShown = false;
+      hideWinModal();
     }
   }
+
+  /* ---------- Win modal ---------- */
+  function formatTime(ms){
+    const total = Math.max(0, Math.round(ms/1000));
+    const m = Math.floor(total/60), s = total%60;
+    return m + ':' + String(s).padStart(2,'0');
+  }
+  function buildShareText(){
+    const dateStr = MONTHS[state.target.monthIdx] + ' ' + state.target.day;
+    const timeStr = state.startTime ? formatTime(Date.now()-state.startTime) : '—';
+    return `Everyday Puzzle — ${dateStr}\nSolved in ${timeStr} · ${state.moveCount} moves 🧩\nCan you solve today's date?\n${location.href}`;
+  }
+  const CONFETTI_COLORS = BASE_PIECES.map(p=>p.color);
+  function spawnConfetti(){
+    confettiLayer.innerHTML = '';
+    const n = 22;
+    for(let i=0;i<n;i++){
+      const s = document.createElement('span');
+      s.className = 'confetti-piece';
+      s.style.left = (Math.random()*100) + '%';
+      s.style.background = CONFETTI_COLORS[i % CONFETTI_COLORS.length];
+      s.style.animationDelay = (Math.random()*0.35) + 's';
+      s.style.transform = `rotate(${Math.random()*360}deg)`;
+      confettiLayer.appendChild(s);
+    }
+  }
+  function showWinModal(){
+    if(state.usedSolver) return; // no fanfare for auto-solved boards
+    modalDate.textContent = MONTHS[state.target.monthIdx] + " " + state.target.day;
+    const timeStr = state.startTime ? formatTime(Date.now()-state.startTime) : '—';
+    modalStats.textContent = `Solved in ${timeStr} · ${state.moveCount} moves`;
+    winModal.classList.add('show');
+    spawnConfetti();
+  }
+  function hideWinModal(){
+    winModal.classList.remove('show');
+  }
+  modalClose.addEventListener('click', hideWinModal);
+  winModal.addEventListener('click', (e)=>{
+    if(e.target === winModal) hideWinModal();
+  });
+  shareBtn.addEventListener('click', async ()=>{
+    const text = buildShareText();
+    if(navigator.share){
+      try{ await navigator.share({ text }); return; } catch(e){ /* fall through */ }
+    }
+    try{
+      await navigator.clipboard.writeText(text);
+      shareBtn.textContent = 'Copied!';
+      setTimeout(()=>{ shareBtn.textContent = 'Share result'; }, 1500);
+    }catch(e){
+      window.prompt('Copy your result:', text);
+    }
+  });
 
   function canPlace(pieceIdForSkip, cells){
     const tgt = new Set(targetCells().map(t=>t.row+","+t.col));
@@ -390,6 +522,8 @@
     piece.anchorCol = anchorCol;
     piece.placed = true;
     writeBoard(piece.id, absCells(piece), true);
+    if(state.startTime === null) state.startTime = Date.now();
+    state.moveCount++;
   }
 
   function rotatePiece(piece, dir){
@@ -739,13 +873,20 @@
   /* ---------- Controls ---------- */
   document.getElementById('solveBtn').addEventListener('click', ()=>{
     const sol = solve();
-    if(sol) applySolution(sol);
+    if(sol){
+      state.usedSolver = true;
+      applySolution(sol);
+    }
     else alert("No solution found — that shouldn't happen! Try Clear and pick another date.");
   });
   document.getElementById('clearBtn').addEventListener('click', ()=>{
     state.pieces.forEach(p=> p.placed=false);
     state.board.fill(-1);
     selectedPieceId = null;
+    state.startTime = null;
+    state.moveCount = 0;
+    state.usedSolver = false;
+    state.wonShown = false;
     renderBoard(); renderTray();
   });
   document.getElementById('todayBtn').addEventListener('click', ()=>{
@@ -753,6 +894,10 @@
     state.pieces.forEach(p=> p.placed=false);
     state.board.fill(-1);
     selectedPieceId = null;
+    state.startTime = null;
+    state.moveCount = 0;
+    state.usedSolver = false;
+    state.wonShown = false;
     renderBoard(); renderTray();
   });
   dateInput.addEventListener('change', ()=>{
@@ -761,6 +906,10 @@
     state.pieces.forEach(p=> p.placed=false);
     state.board.fill(-1);
     selectedPieceId = null;
+    state.startTime = null;
+    state.moveCount = 0;
+    state.usedSolver = false;
+    state.wonShown = false;
     renderBoard(); renderTray();
   });
 
